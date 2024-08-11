@@ -269,7 +269,7 @@ fn main() {
     let mut framebuffer = Framebuffer::new(width, height);
 
     let mut window = Window::new(
-        "Maze Renderer",
+        "The B∀CKROOMS",
         (width as f32 / 1.3) as usize,
         (height as f32 / 1.3) as usize,
         WindowOptions::default(),
