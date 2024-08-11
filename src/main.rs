@@ -210,7 +210,7 @@ fn play_background_music(sink: Arc<Mutex<Sink>>, stream_handle: rodio::OutputStr
     let file = File::open("./assets/horror.mp3").expect("Failed to open music file");
     let source = Decoder::new(BufReader::new(file)).expect("Failed to decode audio");
 
-    let amplified_source = source.amplify(0.5);
+    let amplified_source = source.amplify(0.3);
 
     let sink = sink.lock().unwrap();
     sink.append(amplified_source.repeat_infinite());
@@ -296,6 +296,8 @@ fn main() {
 
     let sensitivity = 0.003; // Mouse sensitivity
 
+    let footstep_sink = Arc::new(Mutex::new(None));
+
     let mut timer = Timer::new(); // Timer instance
     let mut gilrs = Gilrs::new().unwrap(); // Gilrs instance
 
@@ -318,7 +320,16 @@ fn main() {
                 }
             }
             GameState::Playing => {
-                process_events(&window, &mut player, &maze, block_size, &mut gilrs);
+                // In your main loop where you call process_events:
+                process_events(
+                    &window,
+                    &mut player,
+                    &maze,
+                    block_size,
+                    &mut gilrs,
+                    &stream_handle,
+                    &footstep_sink,
+                );
 
                 // Mueve el sprite hacia el jugador
                 sprite.move_towards_player(&player, &maze, block_size);

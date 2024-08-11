@@ -1,6 +1,48 @@
 use crate::player::Player;
 use gilrs::{Button, Event, EventType, Gilrs};
 use minifb::{Key, Window};
+use rodio::OutputStreamHandle; // Import the stream handle
+use rodio::{Decoder, Sink, Source};
+use std::fs::File;
+use std::io::BufReader;
+use std::sync::{Arc, Mutex};
+
+pub fn play_footstep_sound(
+    stream_handle: &OutputStreamHandle,
+    footstep_sink: &Arc<Mutex<Option<Sink>>>,
+) {
+    let mut sink_guard = footstep_sink.lock().unwrap();
+
+    // Check if the footstep sound is already playing; if so, do nothing
+    if sink_guard.is_none() {
+        // Load the footstep sound
+        let file =
+            File::open("./assets/footsteps.mp3").expect("Failed to open footstep sound file");
+        let source = Decoder::new(BufReader::new(file)).expect("Failed to decode footstep audio");
+
+        // Reduce the volume by applying an amplification factor
+        let source = source.amplify(0.8); // Adjust this value as needed
+
+        // Create a new sink to play the sound
+        let sink = Sink::try_new(stream_handle).expect("Failed to create footstep sink");
+        sink.append(source.repeat_infinite()); // Play the sound in a loop
+
+        // Start playing the sound
+        sink.play();
+
+        // Store the sink in the Arc<Mutex<Option<Sink>>>
+        *sink_guard = Some(sink);
+    }
+}
+
+pub fn stop_footstep_sound(footstep_sink: &Arc<Mutex<Option<Sink>>>) {
+    let mut sink_guard = footstep_sink.lock().unwrap();
+
+    // Stop and drop the sink if it exists
+    if let Some(sink) = sink_guard.take() {
+        sink.stop(); // Stop the sound
+    }
+}
 
 pub fn process_events(
     window: &Window,
@@ -8,8 +50,12 @@ pub fn process_events(
     maze: &Vec<Vec<char>>,
     block_size: usize,
     gilrs: &mut Gilrs,
+    stream_handle: &OutputStreamHandle, // Add the stream handle as a parameter
+    footstep_sink: &Arc<Mutex<Option<Sink>>>, // Add footstep_sink as a parameter
 ) {
-    // Existing keyboard input handling
+    let mut player_moved = false;
+
+    // Handle keyboard input
     if window.is_key_down(Key::Up) || window.is_key_down(Key::W) {
         let new_x = player.pos.x + player.dir.x * player.speed;
         let new_y = player.pos.y + player.dir.y * player.speed;
@@ -17,6 +63,7 @@ pub fn process_events(
         if !is_collision(new_x, new_y, maze, block_size) {
             player.pos.x = new_x;
             player.pos.y = new_y;
+            player_moved = true;
         }
     }
 
@@ -27,6 +74,7 @@ pub fn process_events(
         if !is_collision(new_x, new_y, maze, block_size) {
             player.pos.x = new_x;
             player.pos.y = new_y;
+            player_moved = true;
         }
     }
 
@@ -36,6 +84,7 @@ pub fn process_events(
             player.angle += 2.0 * std::f32::consts::PI;
         }
         update_direction(player);
+        player_moved = true;
     }
 
     if window.is_key_down(Key::Right) || window.is_key_down(Key::D) {
@@ -44,6 +93,15 @@ pub fn process_events(
             player.angle -= 2.0 * std::f32::consts::PI;
         }
         update_direction(player);
+        player_moved = true;
+    }
+
+    // If the player moved, play the footstep sound
+    if player_moved {
+        play_footstep_sound(&stream_handle, &footstep_sink);
+    } else {
+        // Si el jugador no se movió, detén el sonido de los pasos
+        stop_footstep_sound(&footstep_sink);
     }
 
     // Handle gamepad input
@@ -55,6 +113,7 @@ pub fn process_events(
                 if !is_collision(new_x, new_y, maze, block_size) {
                     player.pos.x = new_x;
                     player.pos.y = new_y;
+                    player_moved = true;
                 }
             }
             EventType::ButtonPressed(Button::DPadDown, ..) => {
@@ -63,6 +122,7 @@ pub fn process_events(
                 if !is_collision(new_x, new_y, maze, block_size) {
                     player.pos.x = new_x;
                     player.pos.y = new_y;
+                    player_moved = true;
                 }
             }
             EventType::ButtonPressed(Button::DPadLeft, ..) => {
@@ -71,6 +131,7 @@ pub fn process_events(
                     player.angle += 2.0 * std::f32::consts::PI;
                 }
                 update_direction(player);
+                player_moved = true;
             }
             EventType::ButtonPressed(Button::DPadRight, ..) => {
                 player.angle += player.rotation_speed;
@@ -78,9 +139,18 @@ pub fn process_events(
                     player.angle -= 2.0 * std::f32::consts::PI;
                 }
                 update_direction(player);
+                player_moved = true;
             }
             _ => {}
         }
+    }
+
+    // If the player moved using the gamepad, play the footstep sound
+    if player_moved {
+        play_footstep_sound(&stream_handle, &footstep_sink);
+    } else {
+        // Si el jugador no se movió, detén el sonido de los pasos
+        stop_footstep_sound(&footstep_sink);
     }
 }
 
